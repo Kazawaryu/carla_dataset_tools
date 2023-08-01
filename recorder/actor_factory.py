@@ -121,7 +121,8 @@ class ActorFactory(object):
             if actor_type.startswith("vehicle"):
                 node = self.create_vehicle_node(actor_info)
                 root.add_child(node)
-                self.recorde_cars.append(node.get_actor())
+                # self.recorde_cars.append(node.get_actor())
+                # self.recorde_cars.append(node.get_actor().id)
             elif actor_type.startswith("infrastructure"):
                 node = self.create_infrastructure_node(actor_info)
                 root.add_child(node)
@@ -140,12 +141,13 @@ class ActorFactory(object):
 
         other_vehicle_info = json_actors["other_vehicles"]
         ov_nodes = self.create_other_vehicles(other_vehicle_info)
-        for other_vehicle in ov_nodes:
-            self.other_cars.append(other_vehicle.get_actor())
+        # for other_vehicle in ov_nodes:
+            # self.other_cars.append(other_vehicle.get_actor())
+            # self.other_cars.append(other_vehicle.get_actor().id)
         root.get_children().extend(ov_nodes)
 
-        lidar_sensor.get_actor().set_car_list(self.recorde_cars, self.other_cars);
-
+        # lidar_sensor.get_actor().set_car_list(self.recorde_cars, self.other_cars,self.world)
+        lidar_sensor.get_actor().set_world(self.world)
         return root
     
     def get_car_list(self):

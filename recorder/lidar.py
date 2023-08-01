@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import re
+import asyncio
 import open3d as o3d
 import cv2
 import carla
@@ -22,7 +24,7 @@ class Lidar(Sensor):
             lidar_data, (int(lidar_data.shape[0] / 4), 4))
 
         # Convert point cloud to right-hand coordinate system
-        lidar_data[:, 1] *= -1
+        # lidar_data[:, 1] *= -1
 
         # Save point cloud to [RAW_DATA_PATH]/.../[ID]_[SENSOR_TYPE]/[FRAME_ID].npy
         # np.save("{}/{:0>10d}".format(save_dir, sensor_data.frame), lidar_data)
@@ -51,7 +53,7 @@ class SemanticLidar(Sensor):
                                    ]))
 
         # Convert point cloud to right-hand coordinate system
-        lidar_data['y'] *= -1
+        # lidar_data['y'] *= -1
         tick_s = time.time()
         # Save point cloud to [RAW_DATA_PATH]/.../[ID]_[SENSOR_TYPE]/[FRAME_ID].npy
         # dataset, now_dis, score = label_tool.save_label(lidar_data, self.dis_dict)
@@ -60,71 +62,93 @@ class SemanticLidar(Sensor):
         labels = self.get_label()
 
 
-
-
         if True:
-            # np.save("{}/{:0>10d}".format(save_dir,sensor_data.frame),lidar_data)
-            with open("{}/{:0>10d}.bin".format(save_dir,sensor_data.frame), 'wb') as file:
-                file.write(lidar_data)
-            with open("{}/{:0>10d}.txt".format(save_dir,sensor_data.frame),'a+') as f:
-                for line in labels:
-                    print(line,file=f)
+            self.save_data(save_dir,sensor_data,lidar_data,labels)
         return True
     
 
+    def save_data(self,save_dir,sensor_data,lidar_data,labels):
+        with open("{}/{:0>10d}.bin".format(save_dir,sensor_data.frame), 'wb') as file:
+                file.write(lidar_data)
+        with open("{}/{:0>10d}.txt".format(save_dir,sensor_data.frame),'a+') as f:
+            for line in labels:
+                print(line,file=f)
+
     def get_label(self):
         labels = []
-        bbox_dict,trans_dict,tags_dict,trans_vehicle = self.get_near_bounding_box()
-        bbox_vehicle = self.parent.get_carla_bbox()
+        #bbox_dict,trans_dict,tags_dict,trans_vehicle = self.get_near_bounding_box()
+        bbox_dict,trans_dict,tags_dict,sensor_trans = self.get_near_boudning_box_by_world()
         for key in bbox_dict:
             temp_bbox = bbox_dict[key]
             temp_trans = trans_dict[key]
             temp_tag = tags_dict[key]
 
-            # update: use sensor actor position
-
-            delta_pose = np.array([temp_trans.location.x - trans_vehicle.location.x,temp_trans.location.y - trans_vehicle.location.y , temp_trans.location.z - trans_vehicle.location.z ])
+            delta_pose = np.array([temp_trans.location.x - sensor_trans.location.x,temp_trans.location.y - sensor_trans.location.y ,
+                                    temp_trans.location.z - sensor_trans.location.z ])
             
-
-            cx = -(delta_pose[1]+temp_bbox.location.y)
-            cy = -(delta_pose[0]+temp_bbox.location.x)
-            cz = delta_pose[2]+temp_bbox.location.z
+            cx = (delta_pose[1]+temp_bbox.location.x)
+            cy = (delta_pose[0]+temp_bbox.location.y)
+            cz = (delta_pose[2]+temp_bbox.location.z)
             sx = 2*temp_bbox.extent.x
             sy = 2*temp_bbox.extent.y
             sz = 2*temp_bbox.extent.z
-            rotation_y = -(temp_trans.rotation.yaw - trans_vehicle.rotation.yaw + temp_bbox.rotation.yaw)
+            rotation_y = (temp_trans.rotation.yaw - sensor_trans.rotation.yaw + temp_bbox.rotation.yaw)
 
             label_str = "{} {} {} {} {} {} {} {}" .format(cx, cy, cz, sx, sy, sz, rotation_y, "Car-" + str(key) + str(temp_tag))
 
             # label_str = "{} {} {} {} {} {} {} {}" .format(delta_pose[0] + temp_bbox.location.x, delta_pose[1]+temp_bbox.location.y, delta_pose[2]+temp_bbox.location.z,
             #                                                     2*temp_bbox.extent.x, 2*temp_bbox.extent.y, 2*temp_bbox.extent.z,
             #                                                     temp_trans.rotation.yaw - trans_vehicle.rotation.yaw + temp_bbox.rotation.yaw, "Car-" + str(key))
+            
             labels.append(label_str)
         
         return labels
     
-    def set_car_list(self, record_cars, other_cars):
+    def set_car_list(self, record_cars, other_cars, world):
         self.record_cars = record_cars
         self.other_cars = other_cars
+        self.world = world
+
+
+    def set_world(self, world):
+        self.world = world
+
+
+    def get_near_boudning_box_by_world(self):
+        actors_list = self.world.get_actors()
+        bbox_dict = {}
+        trans_dict={}
+        tags_dict = {}
+     
+        for actor in actors_list:
+            # print("[actor_id]",actor.type_id)
+
+            if re.match("^vehicle",str(actor.type_id)):
+                dist = actor.get_transform().location.distance(self.carla_actor.get_transform().location)
+                if dist < 30:
+                    bbox_dict[actor.id] = actor.bounding_box
+                    trans_dict[actor.id] = actor.get_transform()
+                    tags_dict[actor.id] = actor.semantic_tags
+
+        # print("[sensor]",self.carla_actor.get_transform())
+        
+        return bbox_dict,trans_dict,tags_dict,self.carla_actor.get_transform()
 
     def get_near_bounding_box(self):
         bbox_dict = {}
         trans_dict={}
         tags_dict = {}
         # get the bounding box of the near car
-        for vehicle in self.record_cars:
-            print("="*80)
-            print("[vehicle]",vehicle.get_carla_transform())
-            print("[sensor]",self.carla_actor.get_transform())
-            print("="*80)
-            for npc in self.other_cars:       
-                # sem_tag = npc.get_carla_actor().semantic_tags
-                # for tag in sem_tag:
-                #     if tag in {"17","18","19","21","22"}:
-                #         print("[npc]",npc.get_carla_actor().id,npc.get_carla_actor().semantic_tags)
-                #         break
+        for vehicle_id in self.record_cars:
+            vehicle = self.world.get_actor(vehicle_id)
+            # print("="*80)
+            # print("[vehicle]",vehicle.get_carla_transform())
+            # print("[sensor]",self.carla_actor.get_transform())
+            # print("="*80)
+            for npc_id in self.other_cars:       
+                npc = self.world.get_actor(npc_id)
                 dist = npc.get_carla_transform().location.distance(vehicle.get_carla_transform().location)
-                if dist < 30:
+                if dist < 40:
                     bbox_dict[npc.get_carla_actor().id]  = npc.get_carla_bbox()
                     trans_dict[npc.get_carla_actor().id] = npc.get_carla_transform()
                     tags_dict[npc.get_carla_actor().id] = npc.get_carla_actor().semantic_tags

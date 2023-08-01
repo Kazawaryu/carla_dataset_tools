@@ -84,7 +84,7 @@ def rotz(t):
 
 
 def box2corner(box):
-    x = box[0]
+    x = -box[0]
     y = box[1]
     z = box[2]
     l = box[3]  # dx
