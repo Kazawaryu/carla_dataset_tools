@@ -5,7 +5,6 @@ import asyncio
 import open3d as o3d
 import cv2
 import carla
-import time
 import numpy as np
 import label_tools.kitti_lidar.lidar_label_view as label_tool
 import label_tools.lidar_tool.util as util
@@ -39,8 +38,6 @@ class SemanticLidar(Sensor):
         self.dis_dict = {}
 
     def save_to_disk_impl(self, save_dir, sensor_data) -> bool:
-        # TODO: make tools here
-
         # Save data as a Nx6 numpy array.
         lidar_data = np.fromstring(bytes(sensor_data.raw_data),
                                    dtype=np.dtype([
@@ -54,16 +51,14 @@ class SemanticLidar(Sensor):
 
         # Convert point cloud to right-hand coordinate system
         # lidar_data['y'] *= -1
-        tick_s = time.time()
+
         # Save point cloud to [RAW_DATA_PATH]/.../[ID]_[SENSOR_TYPE]/[FRAME_ID].npy
         # dataset, now_dis, score = label_tool.save_label(lidar_data, self.dis_dict)
         # self.dis_dict = now_dis
 
-        labels = self.get_label()
+        labels = self.get_label(lidar_data)
 
-
-        if True:
-            self.save_data(save_dir,sensor_data,lidar_data,labels)
+        self.save_data(save_dir,sensor_data,lidar_data,labels)
         return True
     
 
@@ -74,35 +69,47 @@ class SemanticLidar(Sensor):
             for line in labels:
                 print(line,file=f)
 
-    def get_label(self):
+    def get_label(self,lidar_data):
         labels = []
-        #bbox_dict,trans_dict,tags_dict,trans_vehicle = self.get_near_bounding_box()
+        objects_dict = self.get_label_centerpoint(lidar_data)
         bbox_dict,trans_dict,tags_dict,sensor_trans = self.get_near_boudning_box_by_world()
         for key in bbox_dict:
-            temp_bbox = bbox_dict[key]
-            temp_trans = trans_dict[key]
-            temp_tag = tags_dict[key]
+            if key in objects_dict.keys():
+                temp_bbox = bbox_dict[key]
+                temp_points = objects_dict[key]
+                temp_points = np.array([list(elem) for elem in temp_points])
 
-            delta_pose = np.array([temp_trans.location.x - sensor_trans.location.x,temp_trans.location.y - sensor_trans.location.y ,
-                                    temp_trans.location.z - sensor_trans.location.z ])
-            
-            cx = (delta_pose[1]+temp_bbox.location.x)
-            cy = (delta_pose[0]+temp_bbox.location.y)
-            cz = (delta_pose[2]+temp_bbox.location.z)
-            sx = 2*temp_bbox.extent.x
-            sy = 2*temp_bbox.extent.y
-            sz = 2*temp_bbox.extent.z
-            rotation_y = (temp_trans.rotation.yaw - sensor_trans.rotation.yaw + temp_bbox.rotation.yaw)
+                max_p = np.max(temp_points, axis=0)
+                min_p = np.min(temp_points, axis=0)
+                temp_bbox = bbox_dict[key]
+                temp_trans = trans_dict[key]
+                temp_tag = tags_dict[key]
 
-            label_str = "{} {} {} {} {} {} {} {}" .format(cx, cy, cz, sx, sy, sz, rotation_y, "Car-" + str(key) + str(temp_tag))
+                cx = (max_p[0] + min_p[0])/2
+                cy = (max_p[1] + min_p[1])/2
+                cz = (temp_trans.location.z - sensor_trans.location.z +temp_bbox.location.z)
 
-            # label_str = "{} {} {} {} {} {} {} {}" .format(delta_pose[0] + temp_bbox.location.x, delta_pose[1]+temp_bbox.location.y, delta_pose[2]+temp_bbox.location.z,
-            #                                                     2*temp_bbox.extent.x, 2*temp_bbox.extent.y, 2*temp_bbox.extent.z,
-            #                                                     temp_trans.rotation.yaw - trans_vehicle.rotation.yaw + temp_bbox.rotation.yaw, "Car-" + str(key))
-            
-            labels.append(label_str)
+                sx = 2*temp_bbox.extent.x
+                sy = 2*temp_bbox.extent.y
+                sz = 2*temp_bbox.extent.z
+                rotation_y = (temp_trans.rotation.yaw - sensor_trans.rotation.yaw + temp_bbox.rotation.yaw)
+
+                label_str = "{} {} {} {} {} {} {} {}" .format(cx, cy, cz, sx, sy, sz, rotation_y, "Car-" + str(key) + str(temp_tag))
+    
+                labels.append(label_str)
         
         return labels
+    
+    def get_label_centerpoint(self,semantic_points):
+        usable_labels = {14,15,16}
+        objects_dict = {}
+        for point in semantic_points:
+            if point[5] in usable_labels:
+                if not point[4] in objects_dict:
+                    objects_dict[point[4]] = []
+                objects_dict[point[4]].append(point)
+
+        return objects_dict
     
     def set_car_list(self, record_cars, other_cars, world):
         self.record_cars = record_cars
@@ -112,93 +119,21 @@ class SemanticLidar(Sensor):
 
     def set_world(self, world):
         self.world = world
-
+        
 
     def get_near_boudning_box_by_world(self):
         actors_list = self.world.get_actors()
+
         bbox_dict = {}
         trans_dict={}
         tags_dict = {}
      
         for actor in actors_list:
-            # print("[actor_id]",actor.type_id)
-
             if re.match("^vehicle",str(actor.type_id)):
                 dist = actor.get_transform().location.distance(self.carla_actor.get_transform().location)
-                if dist < 30:
+                if dist < 80:
                     bbox_dict[actor.id] = actor.bounding_box
                     trans_dict[actor.id] = actor.get_transform()
                     tags_dict[actor.id] = actor.semantic_tags
-
-        # print("[sensor]",self.carla_actor.get_transform())
         
         return bbox_dict,trans_dict,tags_dict,self.carla_actor.get_transform()
-
-    def get_near_bounding_box(self):
-        bbox_dict = {}
-        trans_dict={}
-        tags_dict = {}
-        # get the bounding box of the near car
-        for vehicle_id in self.record_cars:
-            vehicle = self.world.get_actor(vehicle_id)
-            # print("="*80)
-            # print("[vehicle]",vehicle.get_carla_transform())
-            # print("[sensor]",self.carla_actor.get_transform())
-            # print("="*80)
-            for npc_id in self.other_cars:       
-                npc = self.world.get_actor(npc_id)
-                dist = npc.get_carla_transform().location.distance(vehicle.get_carla_transform().location)
-                if dist < 40:
-                    bbox_dict[npc.get_carla_actor().id]  = npc.get_carla_bbox()
-                    trans_dict[npc.get_carla_actor().id] = npc.get_carla_transform()
-                    tags_dict[npc.get_carla_actor().id] = npc.get_carla_actor().semantic_tags
-
-        return bbox_dict,trans_dict, tags_dict,self.carla_actor.get_transform()
-
-
-    def project_3D_to_2D(self,img,world_2_camera):
-        # project 3D bounding box in 2D image, need carla camera inner infos(node) and output image
-        # TODO: fix the bug, output as a tuple or string in kitti format
-
-        # edge pairs used to visualize
-        edges = [[0,1], [1,3], [3,2], [2,0], [0,4], [4,5], [5,1], [5,7], [7,6], [6,4], [6,2], [7,3]]
-
-        K = self.build_projection_matrix(800, 600, 90)
-        verts_2D = self.get_near_bounding_box()
-        for verts in verts_2D:
-            for edge in edges:
-                p1 = self.get_image_point(verts[edge[0]], K, world_2_camera)
-                p2 = self.get_image_point(verts[edge[1]],  K, world_2_camera)
-                # TODO: using open3d draw lines and visualize
-                cv2.line(img, (int(p1[0]),int(p1[1])), (int(p2[0]),int(p2[1])), (255,0,0, 255), 1)        
-                
-
-    def build_projection_matrix(w, h, fov):
-        # default: w = 800，h = 600，fov = 90
-        focal = w / (2.0 * np.tan(fov * np.pi / 360.0))
-        K = np.identity(3)
-        K[0, 0] = K[1, 1] = focal
-        K[0, 2] = w / 2.0
-        K[1, 2] = h / 2.0
-        return K
-    
-    def get_image_point(loc, K, w2c):
-        # Calculate 2D projection of 3D coordinate
-
-        # Format the input coordinate (loc is a carla.Position object)
-        point = np.array([loc.x, loc.y, loc.z, 1])
-        # transform to camera coordinates
-        point_camera = np.dot(w2c, point)
-
-        # New we must change from UE4's coordinate system to an "standard"
-        # (x, y ,z) -> (y, -z, x)
-        # and we remove the fourth componebonent also
-        point_camera = [point_camera[1], -point_camera[2], point_camera[0]]
-
-        # now project 3D->2D using the camera matrix
-        point_img = np.dot(K, point_camera)
-        # normalize
-        point_img[0] /= point_img[2]
-        point_img[1] /= point_img[2]
-
-        return point_img[0:2]

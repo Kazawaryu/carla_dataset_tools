@@ -17,8 +17,8 @@ def config_path():
     dir = args.d
     spec = args.s
 
-    pcd = "/home/ghosnp/carla/usable_version_tool/carla_dataset_tools/raw_data/record_2023_"+dir+"/vehicle.tesla.model3_2/velodyne/"+spec+".bin"
-    txt = "/home/ghosnp/carla/usable_version_tool/carla_dataset_tools/raw_data/record_2023_"+dir+"/vehicle.tesla.model3_2/velodyne_semantic/"+spec+".txt"
+    pcd = "/home/ghosnp/carla/usable_version_tool/uv2/carla_dataset_tools/raw_data/record_2023_"+dir+"/vehicle.tesla.model3_2/velodyne/"+spec+".bin"
+    txt = "/home/ghosnp/carla/usable_version_tool/uv2/carla_dataset_tools/raw_data/record_2023_"+dir+"/vehicle.tesla.model3_2/velodyne_semantic/"+spec+".txt"
 
     return pcd,txt
 
@@ -84,7 +84,7 @@ def rotz(t):
 
 
 def box2corner(box):
-    x = -box[0]
+    x = box[0]
     y = box[1]
     z = box[2]
     l = box[3]  # dx
