@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
 import re
-import asyncio
+import sys
 import open3d as o3d
 import cv2
+import math
 import carla
 import numpy as np
 import label_tools.kitti_lidar.lidar_label_view as label_tool
@@ -35,7 +36,25 @@ class Lidar(Sensor):
 class SemanticLidar(Sensor):
     def __init__(self, uid, name: str, base_save_dir: str, parent, carla_actor: carla.Sensor):
         super().__init__(uid, name, base_save_dir, parent, carla_actor)
-        self.dis_dict = {}
+        self.load_parameters()
+
+    def load_parameters(self):      
+        # TODO: write parameters in config file(.yaml)
+        self.Label_dict ={14:"Car",15:"Truck",16:"Bus"}
+        self.Active = False
+        self.Largest_label_range = 75       # object labeling range, max 100
+            
+        if self.Active:
+            self._Hs = 0.8                  # scene entropy 
+            self._rho_b = 45                # temp object rho 
+            self._rho_s = 10                # temp object rho 
+            self._f_tra = 0                 # tracking task 
+            self._k_sig = 4                 # parameter value sigimoid 
+            self._f_sig = 0.8               # result value sigimoid
+
+            self.load_ground_segmentation_model()
+            self.load_object_detection_model()
+
 
     def save_to_disk_impl(self, save_dir, sensor_data) -> bool:
         # Save data as a Nx6 numpy array.
@@ -56,9 +75,13 @@ class SemanticLidar(Sensor):
         # dataset, now_dis, score = label_tool.save_label(lidar_data, self.dis_dict)
         # self.dis_dict = now_dis
 
-        labels = self.get_label(lidar_data)
+        if self.Active:
+            print("use active strategy")
 
-        self.save_data(save_dir,sensor_data,lidar_data,labels)
+
+        else:
+            labels = self.get_label(lidar_data)
+            self.save_data(save_dir,sensor_data,lidar_data,labels)
         return True
     
 
@@ -92,48 +115,167 @@ class SemanticLidar(Sensor):
                 sx = 2*temp_bbox.extent.x
                 sy = 2*temp_bbox.extent.y
                 sz = 2*temp_bbox.extent.z
-                rotation_y = (temp_trans.rotation.yaw - sensor_trans.rotation.yaw + temp_bbox.rotation.yaw)
+                yaw = (temp_trans.rotation.yaw - sensor_trans.rotation.yaw + temp_bbox.rotation.yaw)
 
-                label_str = "{} {} {} {} {} {} {} {}" .format(cx, cy, cz, sx, sy, sz, rotation_y, "Car-" + str(key) + str(temp_tag))
+                label_str = "{} {} {} {} {} {} {} {}" .format(cx, cy, cz, sx, sy, sz, yaw, self.Label_dict[temp_tag[0]])
     
                 labels.append(label_str)
         
         return labels
     
     def get_label_centerpoint(self,semantic_points):
-        usable_labels = {14,15,16}
         objects_dict = {}
         for point in semantic_points:
-            if point[5] in usable_labels:
+            if point[5] in self.Label_dict.keys():
                 if not point[4] in objects_dict:
                     objects_dict[point[4]] = []
                 objects_dict[point[4]].append(point)
 
         return objects_dict
-    
-    def set_car_list(self, record_cars, other_cars, world):
-        self.record_cars = record_cars
-        self.other_cars = other_cars
-        self.world = world
-
 
     def set_world(self, world):
         self.world = world
         
 
     def get_near_boudning_box_by_world(self):
-        actors_list = self.world.get_actors()
-
         bbox_dict = {}
         trans_dict={}
         tags_dict = {}
-     
+
+        actors_list = self.world.get_actors()
         for actor in actors_list:
             if re.match("^vehicle",str(actor.type_id)):
                 dist = actor.get_transform().location.distance(self.carla_actor.get_transform().location)
-                if dist < 80:
+                if dist < self.Largest_label_range:
                     bbox_dict[actor.id] = actor.bounding_box
                     trans_dict[actor.id] = actor.get_transform()
                     tags_dict[actor.id] = actor.semantic_tags
         
         return bbox_dict,trans_dict,tags_dict,self.carla_actor.get_transform()
+    
+    # ============== Active Staregy ====================
+
+    def active_manager(self,lidar_data):
+        labels = []
+        objects_dict = self.get_label_centerpoint(lidar_data)
+
+        return
+
+
+
+    # ------------- 1. Scene Entropy -------------------
+
+    def get_scene_entropy(self, points):
+        voxel_size = 2
+        voxel_max_range = np.max(points, axis=0)
+        voxel_min_range = np.min(points, axis=0)
+
+        voxel_count = [int((voxel_max_range[0] - voxel_min_range[0])/voxel_size),
+                      int((voxel_max_range[1]-voxel_min_range[1])/voxel_size),
+                      int((voxel_max_range[2]-voxel_min_range[2])/voxel_size)]
+        
+        voxel_scene =np.array([voxel_count[0]][voxel_count[1]][voxel_count[2]])
+        for point in points:
+            voxel_scene[int((point[0] - voxel_min_range[0])/voxel_size)][int((point[1] - voxel_min_range[1])/voxel_size)][int((point[2] - voxel_min_range[2])/voxel_size)] += 1
+
+        dt = len(points) / ((voxel_max_range[0] - voxel_min_range[0]) * (voxel_max_range[1] - voxel_min_range[1]) * (voxel_max_range[2] - voxel_min_range[2]))
+        entropy = 0
+        for i in range(voxel_count[0]):
+            for j in range(voxel_count[1]):
+                for k in range(voxel_count[2]):
+                    di = voxel_scene[i][j][k]
+                    entropy -= (di / dt) *  math.log10(di / dt)
+
+        return entropy
+    
+    def cal_entropy_if_keep(self, entropy_last, entropy_now):
+        return abs(entropy_now - entropy_last) / -entropy_last >= self._Hs
+
+    # ------------- 2. Area point rho ------------------
+
+    def get_area_point_rho_objects(self, obj_dict):
+        bbox_dict = {}
+        trans_dict={}
+        tags_dict = {}
+
+        actors_list = self.world.get_actors()
+        for actor in actors_list:
+            if actor.id in obj_dict.keys() and re.match("^vehicle",str(actor.type_id)):
+                dist = actor.get_transform().location.distance(self.carla_actor.get_transform().location)
+                
+                if dist < self.Largest_label_range:
+                    bbox = actor.bounding_box
+                    count = len(obj_dict[actor.id])
+                    volume = 8 * bbox.extent.x * bbox.extent.y * bbox.extent.z
+                    rho = count / volume
+
+                    if rho > self._rho_b:
+                        # upper big matric
+                        bbox_dict[actor.id] = actor.bounding_box
+                        trans_dict[actor.id] = actor.get_transform()
+                        tags_dict[actor.id] = actor.semantic_tags
+                    elif rho > self._rho_s:
+                        # upper small matric, calculate speed
+
+                        # TODO: get speed or use method from paper
+                        velocity = actor.get_velocity()
+                        speed = math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
+                        if speed > self._f_tra:
+                            bbox_dict[actor.id] = actor.bounding_box
+                            trans_dict[actor.id] = actor.get_transform()
+                            tags_dict[actor.id] = actor.semantic_tags
+                        pass
+
+        return bbox_dict, trans_dict, tags_dict
+
+    # ------------- 3. Detecting Distance --------------
+
+    def load_ground_segmentation_model(self):
+        try:
+            seg_module_path= "./utils/patchwork-plusplus/build/python_wrapper"
+            sys.path.insert(0, seg_module_path)
+            import pypatchworkpp 
+
+        except ImportError:
+            print("Cannot find Segmentation Module! Maybe you should build it first.")
+            print("See more details in utils/patchwork-plusplus/README.md")
+            exit(1)
+
+        params = pypatchworkpp.Parameters()
+        self.seg_module = pypatchworkpp.patchworkpp(params)
+        
+
+    def cal_segmentated_ground(self,lidar_data):
+        self.seg_module.estimateGround(lidar_data[:,:4])
+        return self.seg_module.getGround()
+    
+    def get_max_detecting_distance(self, ground_points):
+
+        return
+    
+    def load_object_detection_model(self):
+
+        return
+    
+    def cal_detect_result(self):
+
+        return
+    
+    def get_detecting_distance(self):
+
+        return
+
+    def cal_sigmoid(self, max_dist, det_dist):
+        x = det_dist/ max_dist
+        y = (1 - np.power(np.e, -self._k_sig * x) )/(1 + np.power(np.e, -self._k_sig * x))
+
+        return 1 - y 
+
+    # ------------- 4. Detecting Precision -------------
+
+    def get_detecting_precision(self):
+
+        return
+
+
+    # ============== Active Staregy ====================
