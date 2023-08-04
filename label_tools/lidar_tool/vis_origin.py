@@ -1,11 +1,21 @@
 import open3d as o3d
 import cv2
+import sys
 import numpy as np
 import argparse
 import math
 from pathlib import Path
 
+# try:
+#     path = "/home/ghosnp/carla/usable_version_tool/uv2/carla_dataset_tools/utils/patchwork-plusplus/python_wrapper"
+#     sys.path.insert(0, path)
+#     import pypatchworkpp as ppp
+# except:
+#     print(sys.path)
+#     exit(1)
+
 offset_degree = 0
+
 
 def config_path():
     parser = argparse.ArgumentParser()
@@ -20,6 +30,8 @@ def config_path():
     pcd = "/home/ghosnp/carla/usable_version_tool/uv2/carla_dataset_tools/raw_data/record_2023_"+dir+"/vehicle.tesla.model3_2/velodyne/"+spec+".bin"
     txt = "/home/ghosnp/carla/usable_version_tool/uv2/carla_dataset_tools/raw_data/record_2023_"+dir+"/vehicle.tesla.model3_2/velodyne_semantic/"+spec+".txt"
 
+
+
     return pcd,txt
 
 
@@ -33,6 +45,17 @@ def main():
                                    ]) ,count=-1)
 
     pcd = np.array([list(elem) for elem in pre_point])
+
+    # ground = ppp.getGround(pcd)
+    # nonground = ppp.getNonground(pcd)
+    # time_taken = ppp.getTimeTaken()
+
+    # mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1)
+    # mesh_sphere.compute_vertex_normals()
+    # mesh_sphere.scale(25.0, center=np.array([0, 0, 0]))
+    # ball_line_set = o3d.geometry.LineSet.create_from_triangle_mesh(mesh_sphere)
+    # ball_line_set.paint_uniform_color([0, 0, 1])
+    # vis.add_geometry(ball_line_set)
     
     pred_box = load_pre_label(txt_path) 
     exp_draw_boxes = get_draw_box(pred_box)
@@ -43,21 +66,18 @@ def main():
 
     pcd_o3d = o3d.geometry.PointCloud()
     pcd_o3d.points = o3d.utility.Vector3dVector(pcd[:,:3])
-    
-    R = np.asarray([[np.cos(offset_degree), -np.sin(offset_degree), 0],
-                    [np.sin(offset_degree), np.cos(offset_degree), 0],
-                    [0, 0, 1]])
-    pcd_o3d.rotate(R, center=(0,0,0))
-
-    # mesh_sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1)
-    # mesh_sphere.compute_vertex_normals()
-    # mesh_sphere.scale(25.0, center=np.array([0, 0, 0]))
-    # ball_line_set = o3d.geometry.LineSet.create_from_triangle_mesh(mesh_sphere)
-    # ball_line_set.paint_uniform_color([0, 0, 1])
-    # vis.add_geometry(ball_line_set)
 
     vis.add_geometry(mesh)
     vis.add_geometry(pcd_o3d)
+
+    # ground_o3d = o3d.geometry.PointCloud()
+    # ground_o3d.points = o3d.utility.Vector3dVector(ground[:,:3])
+    # ground_o3d.paint_uniform_color([0, 1, 0])
+
+    # nonground_o3d = o3d.geometry.PointCloud()
+    # nonground_o3d.points = o3d.utility.Vector3dVector(nonground[:,:3])
+    # nonground_o3d.paint_uniform_color([1, 0, 0])
+
 
     for box in exp_draw_boxes:
         vis.add_geometry(box)
@@ -67,10 +87,8 @@ def main():
     render_option.background_color = np.asarray([0, 0, 0])
 
 
-
-    vis.run()    # vis.add_geometry(line_set)
+    vis.run()  
     vis.destroy_window()
-
 
 
     return
@@ -84,8 +102,8 @@ def rotz(t):
 
 
 def box2corner(box):
-    x = box[0]
-    y = box[1]
+    x = -box[0]
+    y = -box[1]
     z = box[2]
     l = box[3]  # dx
     w = box[4]  # dy
@@ -142,9 +160,6 @@ def get_draw_box(pre_box_set):
         draw_box = get_line_set(corner_box)
         draw_boxes.append(draw_box)
     return draw_boxes
-
-
-
 
 if __name__ == "__main__":
     main()

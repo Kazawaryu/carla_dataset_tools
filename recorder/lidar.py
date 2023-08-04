@@ -153,7 +153,7 @@ class SemanticLidar(Sensor):
         
         return bbox_dict,trans_dict,tags_dict,self.carla_actor.get_transform()
     
-    # ============== Active Staregy ====================
+    # ============== Active Startegy ===================
 
     def active_manager(self,lidar_data):
         labels = []
@@ -278,4 +278,4 @@ class SemanticLidar(Sensor):
         return
 
 
-    # ============== Active Staregy ====================
+    # ============== Active Startegy ===================
