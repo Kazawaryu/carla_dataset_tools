@@ -95,15 +95,14 @@ def main():
 
 
 def rotz(t):
-    # seems minus 45 degree would have better performance 
     c = np.cos(np.deg2rad(t)-offset_degree)
     s = np.sin(np.deg2rad(t)-offset_degree)
     return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
 
 def box2corner(box):
-    x = -box[0]
-    y = -box[1]
+    x = box[0]
+    y = box[1]
     z = box[2]
     l = box[3]  # dx
     w = box[4]  # dy

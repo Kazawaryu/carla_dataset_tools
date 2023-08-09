@@ -174,7 +174,7 @@ class SemanticLidar(Sensor):
                       int((voxel_max_range[1]-voxel_min_range[1])/voxel_size),
                       int((voxel_max_range[2]-voxel_min_range[2])/voxel_size)]
         
-        voxel_scene =np.array([voxel_count[0]][voxel_count[1]][voxel_count[2]])
+        voxel_scene = np.zeros(voxel_count)
         for point in points:
             voxel_scene[int((point[0] - voxel_min_range[0])/voxel_size)][int((point[1] - voxel_min_range[1])/voxel_size)][int((point[2] - voxel_min_range[2])/voxel_size)] += 1
 
@@ -249,9 +249,27 @@ class SemanticLidar(Sensor):
         self.seg_module.estimateGround(lidar_data[:,:4])
         return self.seg_module.getGround()
     
-    def get_max_detecting_distance(self, ground_points):
-
-        return
+    def get_max_detecting_distance(self, ground_points, vehicle_center):
+        # get the max distance from vehicle center to the ground points
+        # vehicle_center is the list of labeled vehicle center points
+        rect = cv2.minAreaRect(ground_points[:,:2])
+        rect_points = cv2.boxPoints(rect)
+        rect_points = np.array(rect_points)
+        A = rect_points[0]
+        B = rect_points[1]
+        C = rect_points[2]
+        D = rect_points[3]
+        rect_center = rect[0]
+        dist = 0
+        
+        for p in vehicle_center:
+            # vector direction, if (BA*Bp)(DC*Dp)>=0, cross first, then judge the direction by the sign of cross product
+            if np.cross(B-A,p-B) * np.cross(D-C,p-D) >= 0 and np.cross(C-B,p-C) * np.cross(A-D,p-A) >= 0:
+                tmp_dist = math.sqrt((p[0]-rect_center[0])**2 + (p[1]-rect_center[1])**2)
+                if tmp_dist > dist:
+                    dist = tmp_dist
+        
+        return dist
     
     def load_object_detection_model(self):
 
@@ -279,3 +297,14 @@ class SemanticLidar(Sensor):
 
 
     # ============== Active Startegy ===================
+
+    def cal_BEV_Heatmap(self,points):
+        # calculate the max depth in BEV, and the max depth in the whole scene
+
+
+
+        return
+    
+    def cal_BEV_Heatmap_entropy(self):
+
+        return
