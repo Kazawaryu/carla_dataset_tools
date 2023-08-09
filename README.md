@@ -2,6 +2,28 @@
 
 Data collection tools with active data acquisition strategy implemented for CARLA Simulator.
 
+## Currently update
+
+1. PCD-BEV Heatmap
+   
+   <img title="" src="./pics/heatmap.png" alt="" width="226">
+
+2. Lidar Label tool
+   
+   <img title="" src="./pics/label.png" alt="label" width="441">
+
+3. Several Active Startegy
+   
+   - [x] Scene Entropy
+   
+   - [x] Temp Object tracking startegy
+   
+   - [ ] Detecting startegy
+   
+   - [ ] Scene value calculation
+
+
+
 ## Installation
 
 Download Carla version 0.9.14 [here](https://github.com/carla-simulator/carla).
@@ -92,4 +114,5 @@ Thank you for your interest in contributing to this project! Contributions are h
 To validate the correctness of the strategy, we'd better try multiple algorithms:
 
 - [x] YOLO
-- [ ] CenterPoint
+- [x] CenterPoint
+- [ ] More
