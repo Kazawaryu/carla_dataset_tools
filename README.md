@@ -6,11 +6,11 @@ Data collection tools with active data acquisition strategy implemented for CARL
 
 1. PCD-BEV Heatmap
    
-   <img title="" src="./docs/pics/heatmap.png" alt="" width="226">
+   <img title="" src="./doc/pics/heatmap.png" alt="" width="226">
 
 2. Lidar Label tool
    
-   <img title="" src="./docs/pics/label.png" alt="label" width="441">
+   <img title="" src="./doc/pics/label.png" alt="label" width="441">
 
 3. Several Active Startegy
    
