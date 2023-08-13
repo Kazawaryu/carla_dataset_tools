@@ -2,7 +2,7 @@
 
 Data collection tools with active data acquisition strategy implemented for CARLA Simulator.
 
-## Currently update
+## Current work
 
 1. PCD-BEV Heatmap
    
@@ -18,7 +18,7 @@ Data collection tools with active data acquisition strategy implemented for CARL
    
    - [x] Temp Object tracking startegy
    
-   - [ ] Detecting startegy
+   - [ ] Distance-based Detecting startegy
    
    - [ ] Scene value calculation
 
@@ -29,6 +29,7 @@ Download Carla version 0.9.14 [here](https://github.com/carla-simulator/carla).
 ### Environment
 
 ```shell
+pip install carla==0.9.14
 pip3 install -r requirements.txt
 
 # Write following env into your bashrc or zshrc
@@ -60,11 +61,11 @@ python format_helper.py -s {raw_data/record...}
 
 #### Lidar Data Visualization
 
-Execute the command in the root directory to visualize lidar cloud point:
+See more detail at [Visualize Doc](./doc/How to visulaize result?.md).
 
-```shell
-python label_tools/kitti_lidar/lidar_label_view.py -d {local_semantic_lidar.npy}
-```
+#### Apollo co-simulation
+
+See more detail at [Co-sim](doc/run_apollo_carla.md).
 
 ## Data
 
@@ -94,6 +95,8 @@ Thank you for your interest in contributing to this project! Contributions are h
 - [CARLA Simulator](https://carla.org/)
 - [CARLA Ros Bridge](https://github.com/carla-simulator/ros-bridge)
 - [CARLA_INVS](https://github.com/zijianzhang/CARLA_INVS)
+- [OpenPCDet](https://github.com/open-mmlab/OpenPCDet)
+- [Patchwork++](https://github.com/url-kaist/patchwork-plusplus)
 
 ## Citation
 
@@ -113,4 +116,5 @@ To validate the correctness of the strategy, we'd better try multiple algorithms
 
 - [x] YOLO
 - [x] CenterPoint
-- [ ] More
+- [ ] [Potential Field Based Active Startegy](https://zhuanlan.zhihu.com/p/144816424)
+- [ ] More model

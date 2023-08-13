@@ -11,15 +11,12 @@
    
    ```shell
    cd label_tools/lidar_tool
-   python vis_origin.py -d <dir number xxxx_xxxx> -s <.bin origin point cloud file>
+   python vis_origin.py -d <dir number xxxx_xxxx> -s <.bin origin point cloud file number>
    ```
 
-# Source code getting transform
-
-```shell
-# See recorder/lidar.py, recorder/actor_factory.py
-```
-
-
-
-
+3. See Bev-Heatmap
+   
+   ```shell
+   cd label_tools/lidar_tool
+   python BevHeat.py -d <dir number xxxx_xxxx> -s <.bin origin point cloud file number>
+   ```
