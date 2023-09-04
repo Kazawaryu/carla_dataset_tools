@@ -61,7 +61,7 @@ python format_helper.py -s {raw_data/record...}
 
 #### Lidar Data Visualization
 
-See more detail at [Visualize Doc](./doc/How to visulaize result?.md).
+
 
 #### Apollo co-simulation
 
